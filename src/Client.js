@@ -17,7 +17,7 @@ const ContactFactory = require('./factories/ContactFactory');
 const WebCacheFactory = require('./webCache/WebCacheFactory');
 const { ClientInfo, Message, MessageMedia, Contact, Location, Poll, PollVote, GroupNotification, Label, Call, Buttons, List, Reaction, Broadcast, ScheduledEvent } = require('./structures');
 const NoAuth = require('./authStrategies/NoAuth');
-const {exposeFunctionIfAbsent} = require('./util/Puppeteer');
+const { exposeFunctionIfAbsent } = require('./util/Puppeteer');
 
 /**
  * Starting point for interacting with the WhatsApp Web API
@@ -67,8 +67,8 @@ class Client extends EventEmitter {
         super();
 
         this.options = Util.mergeDefault(DefaultOptions, options);
-        
-        if(!this.options.authStrategy) {
+
+        if (!this.options.authStrategy) {
             this.authStrategy = new NoAuth();
         } else {
             this.authStrategy = this.options.authStrategy;
@@ -95,7 +95,7 @@ class Client extends EventEmitter {
      * Private function
      */
     async inject() {
-        await this.pupPage.waitForFunction('window.Debug?.VERSION != undefined', {timeout: this.options.authTimeoutMs});
+        await this.pupPage.waitForFunction('window.Debug?.VERSION != undefined', { timeout: this.options.authTimeoutMs });
         await this.setDeviceName(this.options.deviceName, this.options.browserName);
         const pairWithPhoneNumber = this.options.pairWithPhoneNumber;
         const version = await this.getWWebVersion();
@@ -117,9 +117,9 @@ class Client extends EventEmitter {
                         if (state !== 'OPENING' && state !== 'UNLAUNCHED' && state !== 'PAIRING') {
                             window.AuthStore.AppState.off('change:state', waitTillInit);
                             r();
-                        } 
+                        }
                     });
-                }); 
+                });
             }
             state = window.AuthStore.AppState.state;
             return state == 'UNPAIRED' || state == 'UNPAIRED_IDLE';
@@ -128,7 +128,7 @@ class Client extends EventEmitter {
         if (needAuthentication) {
             const { failed, failureEventPayload, restart } = await this.authStrategy.onAuthenticationNeeded();
 
-            if(failed) {
+            if (failed) {
                 /**
                  * Emitted when there has been an error while trying to restore an existing session
                  * @event Client#auth_failure
@@ -213,7 +213,7 @@ class Client extends EventEmitter {
                 if (this.options.webVersionCache.type === 'local' && this.currentIndexHtml) {
                     const { type: webCacheType, ...webCacheOptions } = this.options.webVersionCache;
                     const webCache = WebCacheFactory.createWebCache(webCacheType, webCacheOptions);
-            
+
                     await webCache.persist(this.currentIndexHtml, version);
                 }
 
@@ -222,13 +222,13 @@ class Client extends EventEmitter {
                 } else {
                     // make sure all modules are ready before injection
                     // 2 second delay after authentication makes sense and does not need to be made dyanmic or removed
-                    await new Promise(r => setTimeout(r, 2000)); 
+                    await new Promise(r => setTimeout(r, 2000));
                     await this.pupPage.evaluate(ExposeLegacyStore);
                 }
 
                 // Check window.Store Injection
                 await this.pupPage.waitForFunction('window.Store != undefined');
-            
+
                 /**
                      * Current connection information
                      * @type {ClientInfo}
@@ -260,13 +260,13 @@ class Client extends EventEmitter {
         });
         await exposeFunctionIfAbsent(this.pupPage, 'onLogoutEvent', async () => {
             this.lastLoggedOut = true;
-            await this.pupPage.waitForNavigation({waitUntil: 'load', timeout: 5000}).catch((_) => _);
+            await this.pupPage.waitForNavigation({ waitUntil: 'load', timeout: 5000 }).catch((_) => _);
         });
         await this.pupPage.evaluate(() => {
             window.AuthStore.AppState.on('change:state', (_AppState, state) => { window.onAuthAppStateChangedEvent(state); });
             window.AuthStore.AppState.on('change:hasSynced', () => { window.onAppStateHasSyncedEvent(); });
             window.AuthStore.Cmd.on('offline_progress_update', () => {
-                window.onOfflineProgressUpdateEvent(window.AuthStore.OfflineMessageHandler.getOfflineDeliveryProgress()); 
+                window.onOfflineProgressUpdateEvent(window.AuthStore.OfflineMessageHandler.getOfflineDeliveryProgress());
             });
             window.AuthStore.Cmd.on('logout', async () => {
                 await window.onLogoutEvent();
@@ -279,11 +279,11 @@ class Client extends EventEmitter {
      */
     async initialize() {
 
-        let 
+        let
             /**
              * @type {puppeteer.Browser}
              */
-            browser, 
+            browser,
             /**
              * @type {puppeteer.Page}
              */
@@ -300,20 +300,20 @@ class Client extends EventEmitter {
             page = await browser.newPage();
         } else {
             const browserArgs = [...(puppeteerOpts.args || [])];
-            if(!browserArgs.find(arg => arg.includes('--user-agent'))) {
+            if (!browserArgs.find(arg => arg.includes('--user-agent'))) {
                 browserArgs.push(`--user-agent=${this.options.userAgent}`);
             }
             // navigator.webdriver fix
             browserArgs.push('--disable-blink-features=AutomationControlled');
 
-            browser = await puppeteer.launch({...puppeteerOpts, args: browserArgs});
+            browser = await puppeteer.launch({ ...puppeteerOpts, args: browserArgs });
             page = (await browser.pages())[0];
         }
 
         if (this.options.proxyAuthentication !== undefined) {
             await page.authenticate(this.options.proxyAuthentication);
         }
-      
+
         await page.setUserAgent(this.options.userAgent);
         if (this.options.bypassCSP) await page.setBypassCSP(true);
 
@@ -336,7 +336,7 @@ class Client extends EventEmitter {
                 return error;
             };
         });
-        
+
         await page.goto(WhatsWebURL, {
             waitUntil: 'load',
             timeout: 0,
@@ -346,7 +346,7 @@ class Client extends EventEmitter {
         await this.inject();
 
         this.pupPage.on('framenavigated', async (frame) => {
-            if(frame.url().includes('post_logout=1') || this.lastLoggedOut) {
+            if (frame.url().includes('post_logout=1') || this.lastLoggedOut) {
                 this.emit(Events.DISCONNECTED, 'LOGOUT');
                 await this.authStrategy.logout();
                 await this.authStrategy.beforeBrowserInitialized();
@@ -549,9 +549,9 @@ class Client extends EventEmitter {
 
         });
 
-        await exposeFunctionIfAbsent(this.pupPage, 'onChatUnreadCountEvent', async (data) =>{
+        await exposeFunctionIfAbsent(this.pupPage, 'onChatUnreadCountEvent', async (data) => {
             const chat = await this.getChatById(data.id);
-                
+
             /**
                  * Emitted when the chat unread count changes
                  */
@@ -667,10 +667,10 @@ class Client extends EventEmitter {
                  */
             this.emit(Events.CHAT_REMOVED, _chat);
         });
-            
+
         await exposeFunctionIfAbsent(this.pupPage, 'onArchiveChatEvent', async (chat, currState, prevState) => {
             const _chat = await this.getChatById(chat.id);
-                
+
             /**
                  * Emitted when a chat is archived/unarchived
                  * @event Client#chat_archived
@@ -682,8 +682,8 @@ class Client extends EventEmitter {
         });
 
         await exposeFunctionIfAbsent(this.pupPage, 'onEditMessageEvent', (msg, newBody, prevBody) => {
-                
-            if(msg.type === 'revoked'){
+
+            if (msg.type === 'revoked') {
                 return;
             }
             /**
@@ -695,9 +695,9 @@ class Client extends EventEmitter {
                  */
             this.emit(Events.MESSAGE_EDIT, new Message(this, msg), newBody, prevBody);
         });
-            
+
         await exposeFunctionIfAbsent(this.pupPage, 'onAddMessageCiphertextEvent', msg => {
-                
+
             /**
                  * Emitted when messages are edited
                  * @event Client#message_ciphertext
@@ -728,18 +728,18 @@ class Client extends EventEmitter {
             window.Store.Call.on('add', (call) => { window.onIncomingCall(call); });
             window.Store.Chat.on('remove', async (chat) => { window.onRemoveChatEvent(await window.WWebJS.getChatModel(chat)); });
             window.Store.Chat.on('change:archive', async (chat, currState, prevState) => { window.onArchiveChatEvent(await window.WWebJS.getChatModel(chat), currState, prevState); });
-            window.Store.Msg.on('add', (msg) => { 
+            window.Store.Msg.on('add', (msg) => {
                 if (msg.isNewMsg) {
-                    if(msg.type === 'ciphertext') {
+                    if (msg.type === 'ciphertext') {
                         // defer message event until ciphertext is resolved (type changed)
                         msg.once('change:type', (_msg) => window.onAddMessageEvent(window.WWebJS.getMessageModel(_msg)));
                         window.onAddMessageCiphertextEvent(window.WWebJS.getMessageModel(msg));
                     } else {
-                        window.onAddMessageEvent(window.WWebJS.getMessageModel(msg)); 
+                        window.onAddMessageEvent(window.WWebJS.getMessageModel(msg));
                     }
                 }
             });
-            window.Store.Chat.on('change:unreadCount', (chat) => {window.onChatUnreadCountEvent(chat);});
+            window.Store.Chat.on('change:unreadCount', (chat) => { window.onChatUnreadCountEvent(chat); });
             window.Store.PollVote.on('add', async (vote) => {
                 const pollVoteModel = await window.WWebJS.getPollVoteModel(vote);
                 pollVoteModel && window.onPollVoteEvent(pollVoteModel);
@@ -756,7 +756,7 @@ class Client extends EventEmitter {
                         const sender = reaction.author ?? reaction.from;
                         const senderUserJid = sender._serialized;
 
-                        return {...reaction, msgKey, parentMsgKey, senderUserJid, timestamp };
+                        return { ...reaction, msgKey, parentMsgKey, senderUserJid, timestamp };
                     }));
 
                     return ogMethod(...args);
@@ -770,14 +770,14 @@ class Client extends EventEmitter {
                         const parentMsgKey = window.Store.MsgKey.fromString(reaction.parentMsgKey);
                         const timestamp = reaction.timestamp / 1000;
 
-                        return {...reaction, msgKey, parentMsgKey, timestamp };
+                        return { ...reaction, msgKey, parentMsgKey, timestamp };
                     }));
 
                     return ogMethod(...args);
                 }).bind(module);
             }
         });
-    }    
+    }
 
     async initWebVersionCache() {
         const { type: webCacheType, ...webCacheOptions } = this.options.webVersionCache;
@@ -786,22 +786,22 @@ class Client extends EventEmitter {
         const requestedVersion = this.options.webVersion;
         const versionContent = await webCache.resolve(requestedVersion);
 
-        if(versionContent) {
+        if (versionContent) {
             await this.pupPage.setRequestInterception(true);
             this.pupPage.on('request', async (req) => {
-                if(req.url() === WhatsWebURL) {
+                if (req.url() === WhatsWebURL) {
                     req.respond({
                         status: 200,
                         contentType: 'text/html',
                         body: versionContent
-                    }); 
+                    });
                 } else {
                     req.continue();
                 }
             });
         } else {
             this.pupPage.on('response', async (res) => {
-                if(res.ok() && res.url() === WhatsWebURL) {
+                if (res.ok() && res.url() === WhatsWebURL) {
                     const indexHtml = await res.text();
                     this.currentIndexHtml = indexHtml;
                 }
@@ -827,13 +827,13 @@ class Client extends EventEmitter {
             }
         });
         await this.pupBrowser.close();
-        
+
         let maxDelay = 0;
         while (this.pupBrowser.isConnected() && (maxDelay < 10)) { // waits a maximum of 1 second before calling the AuthStrategy
             await new Promise(resolve => setTimeout(resolve, 100));
-            maxDelay++; 
+            maxDelay++;
         }
-        
+
         await this.authStrategy.logout();
     }
 
@@ -904,7 +904,7 @@ class Client extends EventEmitter {
      * @property {MessageMedia} [media] - Media to be sent
      * @property {any} [extra] - Extra options
      */
-    
+
     /**
      * Send a message to a specific chatId
      * @param {string} chatId
@@ -917,7 +917,7 @@ class Client extends EventEmitter {
         const isChannel = /@\w*newsletter\b/.test(chatId);
 
         if (isChannel && [
-            options.sendMediaAsDocument, options.quotedMessageId, 
+            options.sendMediaAsDocument, options.quotedMessageId,
             options.parseVCards, options.isViewOnce,
             content instanceof Location, content instanceof Contact,
             content instanceof Buttons, content instanceof List,
@@ -926,7 +926,7 @@ class Client extends EventEmitter {
             console.warn('The message type is currently not supported for sending in channels,\nthe supported message types are: text, image, sticker, gif, video, voice and poll.');
             return null;
         }
-    
+
         if (options.mentions) {
             !Array.isArray(options.mentions) && (options.mentions = [options.mentions]);
             if (options.mentions.some((possiblyContact) => possiblyContact instanceof Contact)) {
@@ -936,7 +936,7 @@ class Client extends EventEmitter {
         }
 
         options.groupMentions && !Array.isArray(options.groupMentions) && (options.groupMentions = [options.groupMentions]);
-        
+
         let internalOptions = {
             linkPreview: options.linkPreview === false ? undefined : true,
             sendAudioAsVoice: options.sendAudioAsVoice,
@@ -960,12 +960,12 @@ class Client extends EventEmitter {
         if (content instanceof MessageMedia) {
             internalOptions.media = content;
             internalOptions.isViewOnce = options.isViewOnce,
-            content = '';
+                content = '';
         } else if (options.media instanceof MessageMedia) {
             internalOptions.media = options.media;
             internalOptions.caption = content;
             internalOptions.isViewOnce = options.isViewOnce,
-            content = '';
+                content = '';
         } else if (content instanceof Location) {
             internalOptions.location = content;
             content = '';
@@ -995,10 +995,10 @@ class Client extends EventEmitter {
         if (internalOptions.sendMediaAsSticker && internalOptions.media) {
             internalOptions.media = await Util.formatToWebpSticker(
                 internalOptions.media, {
-                    name: options.stickerName,
-                    author: options.stickerAuthor,
-                    categories: options.stickerCategories
-                }, this.pupPage
+                name: options.stickerName,
+                author: options.stickerAuthor,
+                categories: options.stickerCategories
+            }, this.pupPage
             );
         }
 
@@ -1043,7 +1043,7 @@ class Client extends EventEmitter {
             if (!chatWid.isUser()) {
                 return false;
             }
-            
+
             return await window.Store.SendChannelMessage.sendNewsletterAdminInviteMessage(
                 chat,
                 {
@@ -1057,7 +1057,7 @@ class Client extends EventEmitter {
 
         return response.messageSendResult === 'OK';
     }
-    
+
     /**
      * Searches for messages
      * @param {string} query
@@ -1160,22 +1160,22 @@ class Client extends EventEmitter {
 
         return ContactFactory.create(this, contact);
     }
-    
+
     async getMessageById(messageId) {
         const msg = await this.pupPage.evaluate(async messageId => {
             let msg = window.Store.Msg.get(messageId);
-            if(msg) return window.WWebJS.getMessageModel(msg);
+            if (msg) return window.WWebJS.getMessageModel(msg);
 
             const params = messageId.split('_');
             if (params.length !== 3 && params.length !== 4) throw new Error('Invalid serialized message id specified');
 
             let messagesObject = await window.Store.Msg.getMessagesById([messageId]);
             if (messagesObject && messagesObject.messages.length) msg = messagesObject.messages[0];
-            
-            if(msg) return window.WWebJS.getMessageModel(msg);
+
+            if (msg) return window.WWebJS.getMessageModel(msg);
         }, messageId);
 
-        if(msg) return new Message(this, msg);
+        if (msg) return new Message(this, msg);
         return null;
     }
 
@@ -1189,7 +1189,7 @@ class Client extends EventEmitter {
             const chatWid = window.Store.WidFactory.createWid(chatId);
             const chat = window.Store.Chat.get(chatWid) ?? await window.Store.Chat.find(chatWid);
             if (!chat) return [];
-            
+
             const msgs = await window.Store.PinnedMsgUtils.getTable().equals(['chatId'], chatWid.toString());
 
             const pinnedMsgs = msgs.map((msg) => window.Store.Msg.get(msg.parentMsgKey));
@@ -1314,21 +1314,21 @@ class Client extends EventEmitter {
      */
     async setDisplayName(displayName) {
         const couldSet = await this.pupPage.evaluate(async displayName => {
-            if(!window.Store.Conn.canSetMyPushname()) return false;
+            if (!window.Store.Conn.canSetMyPushname()) return false;
             await window.Store.Settings.setPushname(displayName);
             return true;
         }, displayName);
 
         return couldSet;
     }
-    
+
     /**
      * Gets the current connection state for the client
      * @returns {WAState} 
      */
     async getState() {
         return await this.pupPage.evaluate(() => {
-            if(!window.Store) return null;
+            if (!window.Store) return null;
             return window.Store.AppState.state;
         });
     }
@@ -1440,7 +1440,7 @@ class Client extends EventEmitter {
      * @param {number} unmuteDateTs Timestamp at which the chat will be unmuted
      * @returns {Promise<{isMuted: boolean, muteExpiration: number}>}
      */
-    async _muteUnmuteChat (chatId, action, unmuteDateTs) {
+    async _muteUnmuteChat(chatId, action, unmuteDateTs) {
         return this.pupPage.evaluate(async (chatId, action, unmuteDateTs) => {
             const chat = window.Store.Chat.get(chatId) ?? await window.Store.Chat.find(chatId);
             action === 'MUTE'
@@ -1474,11 +1474,11 @@ class Client extends EventEmitter {
                     ? await window.Store.ProfilePic.profilePicFind(chatWid)
                     : await window.Store.ProfilePic.requestProfilePicFromServer(chatWid);
             } catch (err) {
-                if(err.name === 'ServerStatusCodeError') return undefined;
+                if (err.name === 'ServerStatusCodeError') return undefined;
                 throw err;
             }
         }, contactId);
-        
+
         return profilePic ? profilePic.eurl : undefined;
     }
 
@@ -1492,8 +1492,8 @@ class Client extends EventEmitter {
             let contact = window.Store.Contact.get(contactId);
             if (!contact) {
                 const wid = window.Store.WidFactory.createUserWid(contactId);
-                const chatConstructor = window.Store.Contact.getModelsArray().find(c=>!c.isGroup).constructor;
-                contact = new chatConstructor({id: wid});
+                const chatConstructor = window.Store.Contact.getModelsArray().find(c => !c.isGroup).constructor;
+                contact = new chatConstructor({ id: wid });
             }
 
             if (contact.commonGroups) {
@@ -1517,7 +1517,7 @@ class Client extends EventEmitter {
     */
     async resetState() {
         await this.pupPage.evaluate(() => {
-            window.Store.AppState.reconnect(); 
+            window.Store.AppState.reconnect();
         });
     }
 
@@ -1886,7 +1886,7 @@ class Client extends EventEmitter {
                 categories: [],
                 cursorToken: ''
             };
-            
+
             const originalFunction = window.Store.ChannelUtils.getNewsletterDirectoryPageSize;
             limit !== 50 && (window.Store.ChannelUtils.getNewsletterDirectoryPageSize = () => limit);
 
@@ -1930,7 +1930,7 @@ class Client extends EventEmitter {
 
         return labels.map(data => new Label(this, data));
     }
-    
+
     /**
      * Get all current Broadcast
      * @returns {Promise<Array<Broadcast>>}
@@ -2025,7 +2025,7 @@ class Client extends EventEmitter {
 
         return success;
     }
-    
+
     /**
      * Change labels in chats
      * @param {Array<number|string>} labelIds
@@ -2041,12 +2041,12 @@ class Client extends EventEmitter {
             const labels = window.WWebJS.getLabels().filter(e => labelIds.find(l => l == e.id) !== undefined);
             const chats = window.Store.Chat.filter(e => chatIds.includes(e.id._serialized));
 
-            let actions = labels.map(label => ({id: label.id, type: 'add'}));
+            let actions = labels.map(label => ({ id: label.id, type: 'add' }));
 
             chats.forEach(chat => {
                 (chat.labels || []).forEach(n => {
                     if (!actions.find(e => e.id == n)) {
-                        actions.push({id: n, type: 'remove'});
+                        actions.push({ id: n, type: 'remove' });
                     }
                 });
             });
@@ -2195,7 +2195,7 @@ class Client extends EventEmitter {
             return flag;
         }, flag);
     }
-    
+
     /**
      * Get user device count by ID
      * Each WaWeb Connection counts as one device, and the phone (if exists) counts as one
@@ -2231,7 +2231,7 @@ class Client extends EventEmitter {
             return false;
         }, chatId);
     }
-  
+
     /**
      * Generates a WhatsApp call link (video call or voice call)
      * @param {Date} startTime The start time of the call
@@ -2246,7 +2246,7 @@ class Client extends EventEmitter {
         }
 
         startTime = Math.floor(startTime.getTime() / 1000);
-        
+
         return await this.pupPage.evaluate(async (startTimeTs, callType) => {
             const response = await window.Store.ScheduledEventMsgUtils.createEventCallLink(startTimeTs, callType);
             return response ?? '';
@@ -2270,7 +2270,7 @@ class Client extends EventEmitter {
             return true;
         }, response, eventMessageId);
     }
-  
+
     /**
      * Save new contact to user's addressbook or edit the existing one
      * @param {string} phoneNumber The contact's phone number in a format "17182222222", where "1" is a country code
@@ -2279,8 +2279,7 @@ class Client extends EventEmitter {
      * @param {boolean} [syncToAddressbook = false] If set to true, the contact will also be saved to the user's address book on their phone. False by default
      * @returns {Promise<import('..').ChatId>} Object in a wid format
      */
-    async saveOrEditAddressbookContact(phoneNumber, firstName, lastName, syncToAddressbook = false)
-    {
+    async saveOrEditAddressbookContact(phoneNumber, firstName, lastName, syncToAddressbook = false) {
         return await this.pupPage.evaluate(async (phoneNumber, firstName, lastName, syncToAddressbook) => {
             return await window.Store.AddressbookContactUtils.saveContactAction(
                 phoneNumber,
@@ -2297,8 +2296,7 @@ class Client extends EventEmitter {
      * @param {string} phoneNumber The contact's phone number in a format "17182222222", where "1" is a country code
      * @returns {Promise<void>}
      */
-    async deleteAddressbookContact(phoneNumber)
-    {
+    async deleteAddressbookContact(phoneNumber) {
         return await this.pupPage.evaluate(async (phoneNumber) => {
             return await window.Store.AddressbookContactUtils.deleteContactAction(phoneNumber);
         }, phoneNumber);
@@ -2326,5 +2324,172 @@ class Client extends EventEmitter {
         }, userIds);
     }
 }
+
+
+/**
+ * Subscribe to presence updates for a contact.
+ * Emits `presence_update` every time we poll.
+ * @param {string} jid
+ * @param {number} pollInterval - Interval in milliseconds to poll for presence updates
+ */
+Client.prototype.subscribePresence = async function (jid, pollInterval = 5000) {
+    // Directly implement the presence subscription logic here
+    await this.pupPage.evaluate(jid => {
+        try {
+            const utils = window.Store.PresenceUtils || {};
+            const pres = window.Store.Presence || {};
+            const coll = window.Store.PresenceCollection || {};
+            const wid = window.Store.WidFactory.createWid(jid);
+
+            // Try all known subscription methods
+            if (typeof utils.subscribe === 'function') {
+                utils.subscribe([wid]);
+                return true;
+            }
+
+            if (typeof utils.sendSubscribe === 'function') {
+                utils.sendSubscribe([wid]);
+                return true;
+            }
+
+            if (typeof utils.sendSubscribeForDevices === 'function') {
+                utils.sendSubscribeForDevices([wid]);
+                return true;
+            }
+
+            // Only try this if it's actually a function
+            if (pres && typeof pres.subscribe === 'function') {
+                pres.subscribe(wid);
+                return true;
+            }
+
+            // Last resort - add to collection
+            if (coll && typeof coll.add === 'function') {
+                coll.add({ id: wid });
+                return true;
+            }
+
+            // Open the chat - this often triggers presence updates
+            const chat = window.Store.Chat.get(wid);
+            if (chat) {
+                window.Store.Cmd.openChatAt(chat);
+                return true;
+            }
+
+            return false;
+        } catch (err) {
+            // Silent catch
+            return false;
+        }
+    }, jid);
+
+    // First read immediately
+    const first = await this.getPresence(jid);
+    if (first) this.emit(Events.PRESENCE_UPDATE, { jid, ...first });
+
+    // Start a polling loop (simple but effective)
+    const timer = setInterval(async () => {
+        const p = await this.getPresence(jid);
+        if (!p) return;
+        this.emit(Events.PRESENCE_UPDATE, { jid, ...p });
+    }, pollInterval);
+
+    // Remember timer so caller can clear later if needed
+    this._presenceTimers = this._presenceTimers || new Map();
+    this._presenceTimers.set(jid, timer);
+};
+
+/**
+ * Get the latest presence snapshot.
+ * @param {string} jid
+ * @returns {Promise<{isOnline: boolean, lastSeen: number}|null>}
+ */
+Client.prototype.getPresence = async function (jid) {
+    // Directly implement the presence retrieval logic here
+    return await this.pupPage.evaluate(jid => {
+        try {
+            const wid = window.Store.WidFactory.createWid(jid);
+            let result = null;
+
+            // 1. Newer builds keep presence in the Contact model itself
+            try {
+                const contact = window.Store.Contact?.get?.(wid);
+                if (contact && (contact.isOnline !== undefined || contact.lastSeen !== undefined)) {
+                    result = {
+                        isOnline: !!contact.isOnline,
+                        lastSeen: contact.lastSeen ?? null
+                    };
+                    // If we found data here, return it immediately
+                    return result;
+                }
+            } catch (e) {
+                // Silent catch
+            }
+
+            // 2. Classic multi‑device
+            try {
+                const coll = window.Store.PresenceCollection || {};
+                if (coll) {
+                    const fromColl = coll.get?.(wid) || coll.find?.(wid);
+                    if (fromColl) {
+                        result = {
+                            isOnline: !!fromColl.isOnline,
+                            lastSeen: fromColl.lastSeen ?? fromColl.t ?? null
+                        };
+                        return result;
+                    }
+                }
+            } catch (e) {
+                // Silent catch
+            }
+
+            // 3. Legacy single‑device
+            try {
+                const pres = window.Store.Presence || {};
+                if (pres) {
+                    const fromPres = pres.get?.(wid) || pres.find?.(wid);
+                    if (fromPres) {
+                        result = {
+                            isOnline: !!fromPres.isOnline,
+                            lastSeen: fromPres.lastSeen ?? fromPres.t ?? null
+                        };
+                        return result;
+                    }
+                }
+            } catch (e) {
+                // Silent catch
+            }
+
+            // If we got here, we didn't find presence data anywhere
+            return null;
+        } catch (err) {
+            // Silent catch
+            return null;
+        }
+    }, jid);
+};
+
+/**
+ * Keep emitting Events.PRESENCE_UPDATE every `interval` ms
+ * until the client is destroyed.
+ * @param {string} jid
+ * @param {number} interval default 45000 ms
+ */
+Client.prototype.trackPresence = async function (jid, interval = 45000) {
+    await this.subscribePresence(jid);
+
+    const push = async () => {
+        const snap = await this.getPresence(jid);
+        if (snap) this.emit(Events.PRESENCE_UPDATE, { jid, ...snap });
+    };
+
+    await push();                                    // first snapshot now
+
+    if (!this._presenceTimers) this._presenceTimers = new Map();
+    if (this._presenceTimers.has(jid))
+        clearInterval(this._presenceTimers.get(jid));
+
+    this._presenceTimers.set(jid, setInterval(push, interval));
+};
 
 module.exports = Client;
