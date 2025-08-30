@@ -468,6 +468,9 @@ class Client extends EventEmitter {
                 let revoked_msg;
                 if (last_message && msg.id.id === last_message.id.id) {
                     revoked_msg = new Message(this, last_message);
+
+                    if (message.protocolMessageKey)
+                        revoked_msg.id = { ...message.protocolMessageKey };
                 }
 
                 /**
@@ -706,14 +709,15 @@ class Client extends EventEmitter {
             this.emit(Events.MESSAGE_CIPHERTEXT, new Message(this, msg));
         });
 
-        await exposeFunctionIfAbsent(this.pupPage, 'onPollVoteEvent', (vote) => {
-            const _vote = new PollVote(this, vote);
-            /**
-             * Emitted when some poll option is selected or deselected,
-             * shows a user's current selected option(s) on the poll
-             * @event Client#vote_update
-             */
-            this.emit(Events.VOTE_UPDATE, _vote);
+        await exposeFunctionIfAbsent(this.pupPage, 'onPollVoteEvent', (votes) => {
+            for (const vote of votes) {
+                /**
+                 * Emitted when some poll option is selected or deselected,
+                 * shows a user's current selected option(s) on the poll
+                 * @event Client#vote_update
+                 */
+                this.emit(Events.VOTE_UPDATE, new PollVote(this, vote));
+            }
         });
 
         await this.pupPage.evaluate(() => {
@@ -740,10 +744,6 @@ class Client extends EventEmitter {
                 }
             });
             window.Store.Chat.on('change:unreadCount', (chat) => { window.onChatUnreadCountEvent(chat); });
-            window.Store.PollVote.on('add', async (vote) => {
-                const pollVoteModel = await window.WWebJS.getPollVoteModel(vote);
-                pollVoteModel && window.onPollVoteEvent(pollVoteModel);
-            });
 
             if (window.compareWwebVersions(window.Debug.VERSION, '>=', '2.3000.1014111620')) {
                 const module = window.Store.AddonReactionTable;
@@ -761,6 +761,39 @@ class Client extends EventEmitter {
 
                     return ogMethod(...args);
                 }).bind(module);
+
+                const pollVoteModule = window.Store.AddonPollVoteTable;
+                const ogPollVoteMethod = pollVoteModule.bulkUpsert;
+
+                pollVoteModule.bulkUpsert = (async (...args) => {
+                    const votes = await Promise.all(args[0].map(async vote => {
+                        const msgKey = vote.id;
+                        const parentMsgKey = vote.pollUpdateParentKey;
+                        const timestamp = vote.t / 1000;
+                        const sender = vote.author ?? vote.from;
+                        const senderUserJid = sender._serialized;
+
+                        let parentMessage = window.Store.Msg.get(parentMsgKey._serialized);
+                        if (!parentMessage) {
+                            const fetched = await window.Store.Msg.getMessagesById([parentMsgKey._serialized]);
+                            parentMessage = fetched?.messages?.[0] || null;
+                        }
+
+                        return {
+                            ...vote,
+                            msgKey,
+                            sender,
+                            parentMsgKey,
+                            senderUserJid,
+                            timestamp,
+                            parentMessage
+                        };
+                    }));
+
+                    window.onPollVoteEvent(votes);
+
+                    return ogPollVoteMethod.apply(pollVoteModule, args);
+                }).bind(pollVoteModule);
             } else {
                 const module = window.Store.createOrUpdateReactionsModule;
                 const ogMethod = module.createOrUpdateReactions;
@@ -2324,172 +2357,5 @@ class Client extends EventEmitter {
         }, userIds);
     }
 }
-
-
-/**
- * Subscribe to presence updates for a contact.
- * Emits `presence_update` every time we poll.
- * @param {string} jid
- * @param {number} pollInterval - Interval in milliseconds to poll for presence updates
- */
-Client.prototype.subscribePresence = async function (jid, pollInterval = 5000) {
-    // Directly implement the presence subscription logic here
-    await this.pupPage.evaluate(jid => {
-        try {
-            const utils = window.Store.PresenceUtils || {};
-            const pres = window.Store.Presence || {};
-            const coll = window.Store.PresenceCollection || {};
-            const wid = window.Store.WidFactory.createWid(jid);
-
-            // Try all known subscription methods
-            if (typeof utils.subscribe === 'function') {
-                utils.subscribe([wid]);
-                return true;
-            }
-
-            if (typeof utils.sendSubscribe === 'function') {
-                utils.sendSubscribe([wid]);
-                return true;
-            }
-
-            if (typeof utils.sendSubscribeForDevices === 'function') {
-                utils.sendSubscribeForDevices([wid]);
-                return true;
-            }
-
-            // Only try this if it's actually a function
-            if (pres && typeof pres.subscribe === 'function') {
-                pres.subscribe(wid);
-                return true;
-            }
-
-            // Last resort - add to collection
-            if (coll && typeof coll.add === 'function') {
-                coll.add({ id: wid });
-                return true;
-            }
-
-            // Open the chat - this often triggers presence updates
-            const chat = window.Store.Chat.get(wid);
-            if (chat) {
-                window.Store.Cmd.openChatAt(chat);
-                return true;
-            }
-
-            return false;
-        } catch (err) {
-            // Silent catch
-            return false;
-        }
-    }, jid);
-
-    // First read immediately
-    const first = await this.getPresence(jid);
-    if (first) this.emit(Events.PRESENCE_UPDATE, { jid, ...first });
-
-    // Start a polling loop (simple but effective)
-    const timer = setInterval(async () => {
-        const p = await this.getPresence(jid);
-        if (!p) return;
-        this.emit(Events.PRESENCE_UPDATE, { jid, ...p });
-    }, pollInterval);
-
-    // Remember timer so caller can clear later if needed
-    this._presenceTimers = this._presenceTimers || new Map();
-    this._presenceTimers.set(jid, timer);
-};
-
-/**
- * Get the latest presence snapshot.
- * @param {string} jid
- * @returns {Promise<{isOnline: boolean, lastSeen: number}|null>}
- */
-Client.prototype.getPresence = async function (jid) {
-    // Directly implement the presence retrieval logic here
-    return await this.pupPage.evaluate(jid => {
-        try {
-            const wid = window.Store.WidFactory.createWid(jid);
-            let result = null;
-
-            // 1. Newer builds keep presence in the Contact model itself
-            try {
-                const contact = window.Store.Contact?.get?.(wid);
-                if (contact && (contact.isOnline !== undefined || contact.lastSeen !== undefined)) {
-                    result = {
-                        isOnline: !!contact.isOnline,
-                        lastSeen: contact.lastSeen ?? null
-                    };
-                    // If we found data here, return it immediately
-                    return result;
-                }
-            } catch (e) {
-                // Silent catch
-            }
-
-            // 2. Classic multi‑device
-            try {
-                const coll = window.Store.PresenceCollection || {};
-                if (coll) {
-                    const fromColl = coll.get?.(wid) || coll.find?.(wid);
-                    if (fromColl) {
-                        result = {
-                            isOnline: !!fromColl.isOnline,
-                            lastSeen: fromColl.lastSeen ?? fromColl.t ?? null
-                        };
-                        return result;
-                    }
-                }
-            } catch (e) {
-                // Silent catch
-            }
-
-            // 3. Legacy single‑device
-            try {
-                const pres = window.Store.Presence || {};
-                if (pres) {
-                    const fromPres = pres.get?.(wid) || pres.find?.(wid);
-                    if (fromPres) {
-                        result = {
-                            isOnline: !!fromPres.isOnline,
-                            lastSeen: fromPres.lastSeen ?? fromPres.t ?? null
-                        };
-                        return result;
-                    }
-                }
-            } catch (e) {
-                // Silent catch
-            }
-
-            // If we got here, we didn't find presence data anywhere
-            return null;
-        } catch (err) {
-            // Silent catch
-            return null;
-        }
-    }, jid);
-};
-
-/**
- * Keep emitting Events.PRESENCE_UPDATE every `interval` ms
- * until the client is destroyed.
- * @param {string} jid
- * @param {number} interval default 45000 ms
- */
-Client.prototype.trackPresence = async function (jid, interval = 45000) {
-    await this.subscribePresence(jid);
-
-    const push = async () => {
-        const snap = await this.getPresence(jid);
-        if (snap) this.emit(Events.PRESENCE_UPDATE, { jid, ...snap });
-    };
-
-    await push();                                    // first snapshot now
-
-    if (!this._presenceTimers) this._presenceTimers = new Map();
-    if (this._presenceTimers.has(jid))
-        clearInterval(this._presenceTimers.get(jid));
-
-    this._presenceTimers.set(jid, setInterval(push, interval));
-};
 
 module.exports = Client;

@@ -23,13 +23,13 @@ class Message extends Base {
 
     _patch(data) {
         this._data = data;
-        
+
         /**
          * MediaKey that represents the sticker 'ID'
          * @type {string}
          */
         this.mediaKey = data.mediaKey;
-        
+
         /**
          * ID that represents the message
          * @type {object}
@@ -257,7 +257,15 @@ class Message extends Base {
         if (data.latestEditMsgKey) {
             this.latestEditMsgKey = data.latestEditMsgKey;
         }
-        
+
+        /**
+         * Protocol message key.
+         * Can be used to retrieve the ID of an original message that was revoked.
+         */
+        if (data.protocolMessageKey) {
+            this.protocolMessageKey = data.protocolMessageKey;
+        }
+
         /**
          * Links included in the message.
          * @type {Array<{link: string, isSuspicious: boolean}>}
@@ -308,8 +316,8 @@ class Message extends Base {
             return window.WWebJS.getMessageModel(msg);
         }, this.id._serialized);
 
-        if(!newData) return null;
-        
+        if (!newData) return null;
+
         this._patch(newData);
         return this;
     }
@@ -321,7 +329,7 @@ class Message extends Base {
     get rawData() {
         return this._data;
     }
-    
+
     /**
      * Returns the Chat this message was sent in
      * @returns {Promise<Chat>}
@@ -345,7 +353,7 @@ class Message extends Base {
     async getMentions() {
         return await Promise.all(this.mentionedIds.map(async m => await this.client.getContactById(m)));
     }
-    
+
     /**
      * Returns groups mentioned in this message
      * @returns {Promise<GroupChat[]|[]>}
@@ -398,12 +406,12 @@ class Message extends Base {
      * @param {string} reaction - Emoji to react with. Send an empty string to remove the reaction.
      * @return {Promise}
      */
-    async react(reaction){
+    async react(reaction) {
         await this.client.pupPage.evaluate(async (messageId, reaction) => {
             if (!messageId) return null;
             const msg =
                 window.Store.Msg.get(messageId) || (await window.Store.Msg.getMessagesById([messageId]))?.messages?.[0];
-            if(!msg) return null;
+            if (!msg) return null;
             await window.Store.sendReactionToMsg(msg, reaction);
         }, this.id._serialized, reaction);
     }
@@ -477,7 +485,7 @@ class Message extends Base {
                     filesize: msg.size
                 };
             } catch (e) {
-                if(e.status && e.status === 404) return undefined;
+                if (e.status && e.status === 404) return undefined;
                 throw e;
             }
         }, this.id._serialized);
@@ -495,7 +503,7 @@ class Message extends Base {
         await this.client.pupPage.evaluate(async (msgId, everyone, clearMedia) => {
             const msg = window.Store.Msg.get(msgId) || (await window.Store.Msg.getMessagesById([msgId]))?.messages?.[0];
             const chat = window.Store.Chat.get(msg.id.remote) || (await window.Store.Chat.find(msg.id.remote));
-            
+
             const canRevoke =
                 window.Store.MsgActionChecks.canSenderRevokeMsg(msg) || window.Store.MsgActionChecks.canAdminRevokeMsg(msg);
 
@@ -611,7 +619,7 @@ class Message extends Base {
         if (this.type === MessageTypes.PAYMENT) {
             const msg = await this.client.pupPage.evaluate(async (msgId) => {
                 const msg = window.Store.Msg.get(msgId) || (await window.Store.Msg.getMessagesById([msgId]))?.messages?.[0];
-                if(!msg) return null;
+                if (!msg) return null;
                 return msg.serialize();
             }, this.id._serialized);
             return new Payment(this.client, msg);
@@ -680,7 +688,7 @@ class Message extends Base {
             groupMentions: options.groupMentions,
             extraOptions: options.extra
         };
-        
+
         if (!this.fromMe) {
             return null;
         }
